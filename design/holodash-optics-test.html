@@ -1,0 +1,212 @@
+<title>HoloDash — HUD Optics Test</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%;background:#000;overflow:hidden;cursor:none;
+    font-family:-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;text-rendering:geometricPrecision}
+  .tnum{font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+
+  /* stage flips horizontally so it reads correctly in the acrylic reflection */
+  #stage{position:fixed;inset:0;background:#000;
+    --hud:#c6ff00;            /* 555nm-ish yellow-green: peak photopic brightness */
+    --accent:#c6ff00; --warn:#ff5a4d;
+    --dim:color-mix(in srgb,var(--hud) 60%,#000);
+    --glow:color-mix(in srgb,var(--hud) 65%,transparent);
+    /* white outline + colored bloom = legible over any road background (research-backed) */
+    --outline:0 0 1px #fff,0 0 2px rgba(255,255,255,.9);
+    --bloom:0 0 2.4vh var(--glow),0 0 1vh color-mix(in srgb,var(--hud) 80%,transparent);
+    color:var(--hud);transform:scaleX(-1);transition:transform .3s ease;
+    display:flex;align-items:center;justify-content:center}
+  #stage.nomirror{transform:scaleX(1)}
+  .hud{position:relative;width:100%;height:100%}
+
+  /* ============ HERO: maneuver + distance (top + center) ============ */
+  .nav{position:absolute;top:50%;left:50%;transform:translate(-50%,-54%);
+    display:flex;flex-direction:column;align-items:center;gap:1vh}
+  .nav-arrow{width:26vh;height:26vh;color:var(--hud);
+    filter:drop-shadow(0 0 2.2vh var(--glow));transition:transform .35s cubic-bezier(.2,.7,.2,1)}
+  .nav-arrow path,.nav-arrow polygon{stroke:#fff;stroke-width:2;
+    paint-order:stroke;stroke-linejoin:round;stroke-linecap:round}
+  .nav-dist{font-size:18vh;font-weight:680;line-height:.82;letter-spacing:-.03em;color:#fff;
+    text-shadow:var(--outline),var(--bloom)}
+  .nav-dist .u{font-size:5vh;font-weight:600;color:var(--hud);margin-left:.6vw;letter-spacing:.01em;
+    -webkit-text-stroke:0;text-shadow:var(--bloom)}
+  .nav-street{font-size:4vh;font-weight:600;color:var(--hud);letter-spacing:.01em;
+    text-shadow:var(--outline),0 0 1.4vh var(--glow);margin-top:.4vh}
+  /* distance-closing bar: fills as you approach the maneuver */
+  .nav-bar{margin-top:1.6vh;width:34vh;height:1vh;border-radius:99px;
+    background:color-mix(in srgb,var(--hud) 16%,transparent);overflow:hidden}
+  .nav-bar i{display:block;height:100%;width:20%;border-radius:99px;background:var(--hud);
+    box-shadow:0 0 1.4vh var(--glow);transition:width .55s cubic-bezier(.3,.8,.3,1)}
+  /* secondary "then" maneuver */
+  .nav-then{display:flex;align-items:center;gap:1vw;margin-top:1.4vh;opacity:.78;
+    font-size:2.6vh;font-weight:600;color:var(--hud);letter-spacing:.04em;text-shadow:0 0 1vh var(--glow)}
+  .nav-then svg{width:3.2vh;height:3.2vh;color:var(--hud)}
+  .nav-then b{font-weight:700;color:#fff;text-shadow:var(--outline)}
+
+  /* ============ SECONDARY STRIP: speed + limit (demoted, bottom) ============ */
+  .strip{position:absolute;left:0;right:0;bottom:5vh;display:flex;align-items:flex-end;
+    justify-content:space-between;padding:0 7vw}
+  .speedbox{display:flex;align-items:baseline;gap:1vw;
+    text-shadow:var(--outline),0 0 1.2vh var(--glow)}
+  .speedbox b{font-size:11vh;font-weight:650;line-height:.85;color:#fff;letter-spacing:-.02em;
+    transition:color .25s,text-shadow .25s}
+  .speedbox s{font-size:2.6vh;font-weight:600;letter-spacing:.22em;color:var(--hud);text-decoration:none}
+  #stage.over .speedbox b{color:var(--warn);text-shadow:0 0 1px #fff,0 0 2.6vh var(--warn),0 0 1vh var(--warn)}
+  .overchip{font-size:2vh;font-weight:700;letter-spacing:.2em;color:var(--warn);opacity:0;
+    display:flex;align-items:center;gap:.6vw;margin-left:1vw;text-shadow:0 0 1.4vh var(--warn);transition:opacity .25s}
+  .overchip svg{width:2.4vh;height:2.4vh}
+  #stage.over .overchip{opacity:1;animation:bz 1.1s ease-in-out infinite}
+  @keyframes bz{0%,100%{opacity:.55}50%{opacity:1}}
+
+  .limit{width:13vh;height:13vh;border-radius:50%;background:#000;border:1vh solid var(--warn);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    box-shadow:0 0 2vh color-mix(in srgb,var(--warn) 55%,transparent),inset 0 0 1.2vh color-mix(in srgb,var(--warn) 28%,transparent)}
+  .limit b{font-size:6.6vh;font-weight:700;color:#fff;line-height:.9;text-shadow:0 0 1.2vh rgba(255,255,255,.5)}
+  .limit s{font-size:1.5vh;font-weight:600;letter-spacing:.16em;color:rgba(255,255,255,.65);text-decoration:none;margin-top:.3vh}
+
+  /* ===== THEME B · PHOSPHOR (aircraft HUD, monospace, brackets) ===== */
+  #stage[data-theme="phosphor"]{--hud:#7dff5a;--accent:#7dff5a;
+    font-family:ui-monospace,"SF Mono","Roboto Mono",Menlo,monospace}
+  #stage[data-theme="phosphor"] .nav-dist,#stage[data-theme="phosphor"] .speedbox b{font-weight:500}
+  #stage[data-theme="phosphor"] .nav-bar{border-radius:0}
+  #stage[data-theme="phosphor"] .nav-bar i{border-radius:0}
+  #stage[data-theme="phosphor"] .limit{border-radius:0;border:.5vh solid var(--hud);background:none;
+    box-shadow:none;width:auto;height:auto;padding:.3vh 1.4vh}
+  #stage[data-theme="phosphor"] .limit b{color:var(--hud);text-shadow:0 0 1.2vh var(--glow);font-size:5.4vh}
+  #stage[data-theme="phosphor"] .limit s{color:var(--hud);opacity:.8}
+  .brackets{display:none;position:absolute;inset:5vh 6vw}
+  #stage[data-theme="phosphor"] .brackets{display:block}
+  .brackets i{position:absolute;width:5vh;height:5vh;border:.4vh solid var(--hud);opacity:.5;
+    filter:drop-shadow(0 0 .8vh var(--glow))}
+  .brackets i:nth-child(1){top:0;left:0;border-right:none;border-bottom:none}
+  .brackets i:nth-child(2){top:0;right:0;border-left:none;border-bottom:none}
+  .brackets i:nth-child(3){bottom:0;left:0;border-right:none;border-top:none}
+  .brackets i:nth-child(4){bottom:0;right:0;border-left:none;border-top:none}
+
+  /* ===== THEME C · LUMINA (premium warm amber) ===== */
+  #stage[data-theme="lumina"]{--hud:#ffc24d;--accent:#ffc24d}
+  #stage[data-theme="lumina"] .nav-dist,#stage[data-theme="lumina"] .speedbox b{font-weight:620}
+  #stage[data-theme="lumina"] .limit{border-color:var(--warn)}
+
+  /* ===== controls (not mirrored, auto-hide) ===== */
+  #bar{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:20;display:flex;gap:8px;
+    padding:8px;border-radius:16px;background:rgba(18,20,24,.86);border:1px solid #2a2f38;
+    backdrop-filter:blur(14px);transition:opacity .35s;flex-wrap:wrap;justify-content:center;max-width:94vw}
+  #bar.hide{opacity:0;pointer-events:none}
+  #bar button{min-width:46px;min-height:46px;padding:0 14px;border-radius:11px;cursor:pointer;
+    font:600 13px/1 -apple-system,Roboto,sans-serif;color:#dfe3ea;background:#232832;border:1px solid #333a45;
+    display:flex;align-items:center;gap:7px;transition:background .15s,transform .1s}
+  #bar button:active{transform:scale(.95)}
+  #bar .v{color:#7f8794;font-weight:500;font-variant-numeric:tabular-nums}
+  #hint{position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:20;font-size:12.5px;color:#8b929c;
+    background:rgba(16,18,22,.8);border:1px solid #262b33;padding:8px 16px;border-radius:10px;transition:opacity .5s}
+  #hint.hide{opacity:0}
+</style>
+
+<div id="stage" data-theme="precision">
+  <div class="hud">
+    <div class="brackets"><i></i><i></i><i></i><i></i></div>
+
+    <div class="nav">
+      <svg class="nav-arrow" id="arrow" viewBox="0 0 100 100" fill="currentColor">
+        <path id="apath" d="M36 90 L36 50 Q36 36 50 36 L66 36" fill="none" stroke="currentColor" stroke-width="13"/>
+        <polygon id="ahead" points="60,20 90,40 60,60"/>
+      </svg>
+      <div class="nav-dist tnum"><span id="dist">400</span><span class="u">m</span></div>
+      <div class="nav-street" id="street">onto MG Road</div>
+      <div class="nav-bar"><i id="navfill"></i></div>
+      <div class="nav-then">
+        <span>then</span>
+        <svg viewBox="0 0 100 100" fill="currentColor"><path d="M64 88 L64 50 Q64 38 52 38 L36 38" fill="none" stroke="currentColor" stroke-width="14"/><polygon points="42,22 14,40 42,58"/></svg>
+        <b id="thenstreet">Ring Road</b>
+      </div>
+    </div>
+
+    <div class="strip">
+      <div style="display:flex;align-items:flex-end">
+        <div class="speedbox"><b class="tnum" id="speed">48</b><s>KM/H</s></div>
+        <span class="overchip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 3 L22 20 H2 Z"/><path d="M12 9v5"/></svg>OVER</span>
+      </div>
+      <div class="limit"><b id="limit">50</b><s>LIMIT</s></div>
+    </div>
+  </div>
+</div>
+
+<div id="hint">tap to show controls · set brightness to max</div>
+<div id="bar">
+  <button id="bStyle">◐ <span class="v" id="vStyle">Precision</span></button>
+  <button id="bTint">✦ <span class="v" id="vTint">Lime 555</span></button>
+  <button id="bMirror">⇄ <span class="v" id="vMirror">Mirror on</span></button>
+  <button id="bFs">⛶ Fullscreen</button>
+  <button id="bPause">⏸</button>
+</div>
+
+<script>
+(function(){
+  var S=document.getElementById('stage'),bar=document.getElementById('bar'),hint=document.getElementById('hint');
+  var elSpeed=document.getElementById('speed'),elLimit=document.getElementById('limit'),elDist=document.getElementById('dist'),
+      elStreet=document.getElementById('street'),elThen=document.getElementById('thenstreet'),
+      apath=document.getElementById('apath'),ahead=document.getElementById('ahead'),arrow=document.getElementById('arrow'),
+      navfill=document.getElementById('navfill'),distU=document.querySelector('.nav-dist .u');
+
+  var themes=['precision','phosphor','lumina'],names=['Precision','Phosphor','Lumina'],th=0;
+  document.getElementById('bStyle').onclick=function(e){e.stopPropagation();th=(th+1)%3;S.dataset.theme=themes[th];
+    document.getElementById('vStyle').textContent=names[th];tint=-1;clearTint();flash();};
+
+  // hue override for the daylight color test — Lime(555nm) default, then Cyan / Amber / White
+  var hues=[['Lime 555','#c6ff00'],['Cyan','#43e5ff'],['Amber','#ffc24d'],['White','#ffffff']],tint=0;
+  function clearTint(){S.style.removeProperty('--hud');S.style.removeProperty('--accent');document.getElementById('vTint').textContent=names[th]==='Phosphor'?'Theme hue':'Theme hue';}
+  document.getElementById('bTint').onclick=function(e){e.stopPropagation();tint=(tint+1)%(hues.length+1);
+    if(tint===hues.length){tint=-1;S.style.removeProperty('--hud');S.style.removeProperty('--accent');document.getElementById('vTint').textContent='Theme hue';}
+    else{S.style.setProperty('--hud',hues[tint][1]);S.style.setProperty('--accent',hues[tint][1]);
+      document.getElementById('vTint').textContent=hues[tint][0];}flash();};
+  S.style.setProperty('--hud',hues[0][1]);S.style.setProperty('--accent',hues[0][1]);
+
+  document.getElementById('bMirror').onclick=function(e){e.stopPropagation();
+    var on=!S.classList.toggle('nomirror');document.getElementById('vMirror').textContent='Mirror '+(on?'on':'off');flash();};
+  document.getElementById('bFs').onclick=function(e){e.stopPropagation();var d=document.documentElement;
+    (d.requestFullscreen||d.webkitRequestFullscreen||function(){}).call(d);flash();};
+  var paused=false;
+  document.getElementById('bPause').onclick=function(e){e.stopPropagation();paused=!paused;
+    this.firstChild.textContent=paused?'▶ ':'⏸ ';flash();};
+
+  var hideT;function flash(){bar.classList.remove('hide');clearTimeout(hideT);
+    hideT=setTimeout(function(){bar.classList.add('hide');},4000);}
+  document.body.addEventListener('click',flash);flash();
+  setTimeout(function(){hint.classList.add('hide');},5500);
+  document.addEventListener('keydown',function(e){var k=e.key.toLowerCase();
+    if(k==='s')document.getElementById('bStyle').click();else if(k==='t')document.getElementById('bTint').click();
+    else if(k==='m')document.getElementById('bMirror').click();else if(k==='f')document.getElementById('bFs').click();
+    else if(k===' '){e.preventDefault();document.getElementById('bPause').click();}});
+
+  // ===== simulated drive =====
+  var R={right:{d:'M36 90 L36 50 Q36 36 50 36 L66 36',h:'60,20 90,40 60,60'},
+         left:{d:'M64 90 L64 50 Q64 36 50 36 L34 36',h:'40,20 10,40 40,60'},
+         straight:{d:'M50 90 L50 30',h:'30,46 50,18 70,46'}};
+  var legs=[{t:'right',s:'onto MG Road',then:'Ring Road'},
+            {t:'left',s:'onto Ring Road',then:'NH-48 ramp'},
+            {t:'straight',s:'continue ahead',then:'Field Marshal Rd'},
+            {t:'right',s:'merge onto NH-48',then:'Exit 12'}];
+  var speed=48,limit=50,dist=400,dist0=400,li=0;
+
+  function setLeg(L){var a=R[L.t];apath.setAttribute('d',a.d);ahead.setAttribute('points',a.h);
+    elStreet.textContent=L.s;elThen.textContent=L.then;}
+  function render(){
+    elSpeed.textContent=Math.round(speed);elLimit.textContent=limit;
+    S.classList.toggle('over',speed>limit+2);
+    elDist.textContent=dist>=1000?(dist/1000).toFixed(1):Math.round(dist/10)*10;
+    distU.textContent=dist>=1000?'km':'m';
+    var f=Math.max(.04,Math.min(1,1-dist/dist0));navfill.style.width=(f*100)+'%';
+  }
+  setLeg(legs[0]);render();
+  setInterval(function(){
+    if(paused)return;
+    speed+=(Math.random()-0.44)*5;speed=Math.max(0,Math.min(140,speed));
+    dist-=18+Math.random()*26;
+    if(dist<=0){li=(li+1)%legs.length;setLeg(legs[li]);dist=200+((Math.random()*8)|0)*100;dist0=dist;
+      limit=[30,40,50,60,80,100][(Math.random()*6)|0];}
+    render();
+  },850);
+})();
+</script>

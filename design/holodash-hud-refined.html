@@ -1,0 +1,144 @@
+<title>HoloDash — Refined HUD</title>
+<style>
+  :root{
+    --cyan:#5fd8ff; --cyan-soft:#9fe9ff; --ink:#eaf6fb; --dim:#6f8c98; --red:#ff5a52;
+    --bg0:#05080b; --bg1:#000;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%;background:#000;overflow:hidden;
+    font-family:ui-sans-serif,system-ui,"SF Pro Display","Helvetica Neue",Arial,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  .tnum{font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+
+  .wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+  .stage{position:relative;width:min(100vw,calc(100vh*1.7778));aspect-ratio:16/9;
+    background:radial-gradient(120% 90% at 50% 12%, #0a1218 0%, #06090d 45%, #000 100%);
+    overflow:hidden}
+
+  /* faint road horizon for depth (production HUD is pure black; this is mock context) */
+  .horizon{position:absolute;left:0;right:0;top:31%;height:1px;
+    background:linear-gradient(90deg,transparent,rgba(95,216,255,.10),transparent)}
+
+  /* ---------- perspective route (spatial cue) ---------- */
+  .road{position:absolute;left:50%;bottom:0;transform:translateX(-50%);width:62%;height:62%}
+
+  /* ---------- maneuver hero ---------- */
+  .maneuver{position:absolute;top:11%;left:50%;transform:translateX(-50%);
+    display:flex;align-items:center;gap:2.2vw}
+  .turn{width:8.2vw;height:8.2vw;min-width:84px;min-height:84px;color:var(--cyan);
+    filter:drop-shadow(0 0 14px rgba(95,216,255,.55))}
+  .mblock{display:flex;flex-direction:column;gap:.4vh}
+  .dist{display:flex;align-items:baseline;gap:.5vw;line-height:.9}
+  .dist .n{font-size:8.6vw;font-weight:560;letter-spacing:-.035em;color:var(--ink);
+    text-shadow:0 0 26px rgba(95,216,255,.35)}
+  .dist .u{font-size:2.6vw;font-weight:500;color:var(--cyan);letter-spacing:.01em}
+  .street{align-self:flex-start;display:flex;align-items:center;gap:.5vw;
+    padding:.5vh 1.1vw;border:1px solid rgba(95,216,255,.30);border-radius:999px;
+    background:rgba(95,216,255,.06);backdrop-filter:blur(2px)}
+  .street span{font-size:1.5vw;font-weight:500;letter-spacing:.02em;color:var(--cyan-soft);white-space:nowrap}
+
+  /* ---------- speed gauge (secondary, bottom-left) ---------- */
+  .speed{position:absolute;left:6%;bottom:12%;display:flex;align-items:flex-end;gap:1.4vw}
+  .gauge{position:relative;width:13vw;height:13vw;min-width:128px;min-height:128px}
+  .gauge .ctr{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.2vh}
+  .gauge .ctr .v{font-size:3.8vw;font-weight:430;color:var(--ink);line-height:.9}
+  .gauge .ctr .l{font-size:.92vw;font-weight:600;letter-spacing:.22em;color:var(--dim)}
+  .limit{display:flex;flex-direction:column;align-items:center;gap:.7vh;margin-bottom:1.4vh}
+  .limit .ring{position:relative;width:5.4vw;height:5.4vw;min-width:54px;min-height:54px;border-radius:50%;
+    border:2.5px solid var(--red);display:flex;align-items:center;justify-content:center;
+    box-shadow:0 0 14px rgba(255,90,82,.35), inset 0 0 8px rgba(255,90,82,.12)}
+  .limit .ring b{font-size:2.4vw;font-weight:600;color:#fff}
+  .limit .cap{font-size:.82vw;font-weight:600;letter-spacing:.18em;color:var(--dim)}
+
+  /* over-limit state (toggle) turns the speed value + arc red */
+  .stage.over .gauge .ctr .v{color:var(--red);text-shadow:0 0 20px rgba(255,90,82,.5)}
+  .stage.over .arcval{stroke:var(--red);filter:drop-shadow(0 0 8px rgba(255,90,82,.6))}
+
+  /* controls */
+  #ctl{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);display:flex;gap:8px;z-index:9;
+    transition:opacity .4s}
+  #ctl.hide{opacity:0}
+  #ctl button{font:600 12px/1 ui-sans-serif,system-ui;color:#cfe7f0;background:rgba(18,26,32,.85);
+    border:1px solid #20323b;border-radius:9px;padding:9px 13px;cursor:pointer;backdrop-filter:blur(8px)}
+</style>
+
+<div class="wrap">
+  <div class="stage" id="stage">
+    <div class="horizon"></div>
+
+    <svg class="road" viewBox="0 0 400 240" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <defs>
+        <linearGradient id="routeFade" x1="0" y1="1" x2="0" y2="0">
+          <stop offset="0" stop-color="#5fd8ff" stop-opacity="0.95"/>
+          <stop offset="0.7" stop-color="#5fd8ff" stop-opacity="0.55"/>
+          <stop offset="1" stop-color="#5fd8ff" stop-opacity="0"/>
+        </linearGradient>
+        <linearGradient id="laneFade" x1="0" y1="1" x2="0" y2="0">
+          <stop offset="0" stop-color="#ffffff" stop-opacity="0.16"/>
+          <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <path d="M70 240 L188 40" stroke="url(#laneFade)" stroke-width="2" stroke-linecap="round"/>
+      <path d="M330 240 L212 40" stroke="url(#laneFade)" stroke-width="2" stroke-linecap="round"/>
+      <path d="M150 240 L196 60" stroke="#ffffff" stroke-opacity="0.05" stroke-width="1.5"/>
+      <path d="M250 240 L204 60" stroke="#ffffff" stroke-opacity="0.05" stroke-width="1.5"/>
+      <path id="routeLine" d="M200 238 C200 170 206 120 232 96 C258 72 300 66 332 60"
+        stroke="url(#routeFade)" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"
+        style="filter:drop-shadow(0 0 10px rgba(95,216,255,.45))"/>
+      <path d="M322 48 L344 60 L322 72 Z" fill="#5fd8ff" style="filter:drop-shadow(0 0 8px rgba(95,216,255,.6))"/>
+      <path d="M192 236 L200 222 L208 236 Z" fill="#eaf6fb" fill-opacity="0.9"/>
+    </svg>
+
+    <div class="maneuver">
+      <svg class="turn" viewBox="0 0 100 100" fill="none" stroke="currentColor"
+           stroke-width="9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M30 84 L30 50 Q30 36 44 36 L66 36"/>
+        <path d="M56 22 L80 36 L56 50" fill="currentColor" stroke="none"/>
+      </svg>
+      <div class="mblock">
+        <div class="dist"><span class="n tnum">300</span><span class="u">m</span></div>
+        <div class="street"><span>MG Road</span></div>
+      </div>
+    </div>
+
+    <div class="speed">
+      <div class="gauge">
+        <svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg" style="position:absolute;inset:0">
+          <defs>
+            <linearGradient id="arcGrad" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#3ec8ff"/><stop offset="1" stop-color="#bdeeff"/>
+            </linearGradient>
+          </defs>
+          <circle cx="100" cy="100" r="86" stroke="#ffffff" stroke-opacity="0.10" stroke-width="5"
+            stroke-linecap="round" stroke-dasharray="405 540" transform="rotate(135 100 100)"/>
+          <circle class="arcval" cx="100" cy="100" r="86" stroke="url(#arcGrad)" stroke-width="5"
+            stroke-linecap="round" stroke-dasharray="196 540" transform="rotate(135 100 100)"
+            style="filter:drop-shadow(0 0 6px rgba(95,216,255,.5))"/>
+          <circle cx="100" cy="14" r="4.5" fill="#eaf6fb" transform="rotate(38 100 100)"/>
+        </svg>
+        <div class="ctr"><div class="v tnum" id="spv">58</div><div class="l">KM/H</div></div>
+      </div>
+      <div class="limit">
+        <div class="ring"><b class="tnum">60</b></div>
+        <div class="cap">LIMIT</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="ctl">
+  <button id="bOver">Show over-limit</button>
+  <button id="bFs">⛶ Fullscreen</button>
+</div>
+
+<script>
+(function(){
+  var stage=document.getElementById('stage'),spv=document.getElementById('spv'),ctl=document.getElementById('ctl');
+  var over=false;
+  document.getElementById('bOver').onclick=function(e){e.stopPropagation();over=!over;
+    stage.classList.toggle('over',over); spv.textContent=over?'68':'58'; this.textContent=over?'Show within-limit':'Show over-limit';};
+  document.getElementById('bFs').onclick=function(e){e.stopPropagation();var d=document.documentElement;(d.requestFullscreen||function(){}).call(d);};
+  var t;function flash(){ctl.classList.remove('hide');clearTimeout(t);t=setTimeout(function(){ctl.classList.add('hide');},3500);}
+  document.body.addEventListener('mousemove',flash);flash();
+})();
+</script>
